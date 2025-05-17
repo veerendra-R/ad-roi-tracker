@@ -1,0 +1,6 @@
+pandas
+google-ads
+facebook-business
+pymongo
+streamlit
+python-dotenv
