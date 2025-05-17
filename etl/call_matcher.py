@@ -14,7 +14,7 @@ df["cost_per_call"] = df.apply(
 
 # Aggregated metrics per campaign
 campaign_summary = df.groupby(
-    ["utm_source", "utm_medium", "utm_campaign", "ad_platform"]
+    ["utm_source", "utm_medium", "utm_campaign", "ad_platform","tenant_id"]
 ).agg(
     total_calls=("call_id", "count"),
     completed_calls=("call_status", lambda x: (x == "completed").sum()),

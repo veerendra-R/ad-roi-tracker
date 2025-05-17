@@ -1,4 +1,3 @@
-ad_id,ad_name,campaign_id,campaign_name,adset_id,adset_name,impressions,clicks,spend,utm_source,utm_medium,utm_campaign
-1111,Meta Ad 1,2001,Home Services Leads,3001,Plumbers Ad Set,1023,56,234.5,facebook,cpc,plumbing_leads
-1112,Meta Ad 2,2002,Clinic Promotion,3002,Doctors City Ad Set,832,45,198.9,facebook,cpc,clinic_2024
-
+ad_id,ad_name,campaign_id,campaign_name,adset_id,adset_name,impressions,clicks,spend,utm_source,utm_medium,utm_campaign,tenant_id
+1111,Meta Ad 1,2001,Home Services Leads,3001,Plumbers Ad Set,1023,56,234.5,facebook,cpc,plumbing_leads,tenant_001
+1112,Meta Ad 2,2002,Clinic Promotion,3002,Doctors City Ad Set,832,45,198.9,facebook,cpc,clinic_2024,tenant_001

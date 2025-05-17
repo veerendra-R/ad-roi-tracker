@@ -29,7 +29,7 @@ merged_df = pd.merge(
     how="left",  # left join to keep all calls
     suffixes=("_call", "_ad")
 )
-
+merged_df["tenant_id"] = merged_df["tenant_id"].fillna("tenant_001")  # from ad data
 # Save output
 merged_df.to_csv("sample_data/lead_attribution.csv", index=False)
 print("✅ Merged attribution table saved to sample_data/lead_attribution.csv")

@@ -1,3 +1,3 @@
-utm_source,utm_medium,utm_campaign,ad_platform,total_calls,completed_calls,missed_calls,total_spend,cost_per_call
-facebook,cpc,clinic_2024,Meta,2,1,1,397.8,198.9
-google,cpc,plumbing_leads,Google,2,2,0,600.0,300.0
+utm_source,utm_medium,utm_campaign,ad_platform,tenant_id,total_calls,completed_calls,missed_calls,total_spend,cost_per_call
+facebook,cpc,clinic_2024,Meta,tenant_001,2,1,1,397.8,198.9
+google,cpc,plumbing_leads,Google,tenant_001,2,2,0,600.0,300.0
