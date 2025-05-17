@@ -1,23 +1,33 @@
 import os
-from google.ads.googleads.client import GoogleAdsClient
-from dotenv import load_dotenv
 import pandas as pd
+from dotenv import load_dotenv
+from google.ads.googleads.client import GoogleAdsClient
+from pymongo import MongoClient
 
 load_dotenv()
 
-# Load credentials
-credentials = {
-    "developer_token": os.getenv("DEVELOPER_TOKEN"),
-    "client_id": os.getenv("CLIENT_ID"),
-    "client_secret": os.getenv("CLIENT_SECRET"),
-    "refresh_token": os.getenv("REFRESH_TOKEN"),
-    "login_customer_id": None,
-    "use_proto_plus": True,
-}
+# Global credentials (shared)
+GOOGLE_CLIENT_ID = os.getenv("CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+GOOGLE_DEVELOPER_TOKEN = os.getenv("DEVELOPER_TOKEN")
 
-client = GoogleAdsClient.load_from_dict(credentials)
+# MongoDB setup to load tenants
+MONGO_URI = os.getenv("MONGO_URI")
+client = MongoClient(MONGO_URI)
+db = client["roi_tracker"]
+tenants = db.tenants.find({})
 
-def fetch_campaigns(customer_id):
+def fetch_campaigns_for_tenant(tenant):
+    credentials = {
+        "developer_token": GOOGLE_DEVELOPER_TOKEN,
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "refresh_token": tenant.get("google_ads_refresh_token"),
+        "login_customer_id": None,
+        "use_proto_plus": True,
+    }
+
+    client = GoogleAdsClient.load_from_dict(credentials)
     ga_service = client.get_service("GoogleAdsService")
 
     query = """
@@ -32,12 +42,16 @@ def fetch_campaigns(customer_id):
         LIMIT 20
     """
 
+    customer_id = tenant.get("google_ads_customer_id")
+    tenant_id = tenant.get("_id")
+
     response = ga_service.search_stream(customer_id=customer_id, query=query)
-    
+
     data = []
     for batch in response:
         for row in batch.results:
             data.append({
+                "tenant_id": tenant_id,
                 "campaign_id": row.campaign.id,
                 "campaign_name": row.campaign.name,
                 "status": row.campaign.status.name,
@@ -47,8 +61,19 @@ def fetch_campaigns(customer_id):
             })
 
     df = pd.DataFrame(data)
-    df.to_csv("sample_data/google_ads.csv", index=False)
-    print("✅ Google Ads campaign data saved to sample_data/google_ads.csv")
+    return df
 
 if __name__ == "__main__":
-    fetch_campaigns(os.getenv("CUSTOMER_ID"))
+    all_data = []
+    for tenant in tenants:
+        if tenant.get("google_ads_customer_id") and tenant.get("google_ads_refresh_token"):
+            try:
+                tenant_df = fetch_campaigns_for_tenant(tenant)
+                all_data.append(tenant_df)
+            except Exception as e:
+                print(f"❌ Error fetching for tenant {tenant['_id']}: {e}")
+
+    if all_data:
+        combined_df = pd.concat(all_data, ignore_index=True)
+        combined_df.to_csv("sample_data/google_ads.csv", index=False)
+        print("✅ All Google Ads campaign data saved to sample_data/google_ads.csv")

@@ -1,20 +1,25 @@
 import pandas as pd
+from pymongo import MongoClient
+from dotenv import load_dotenv
+import os
 
-# Load merged attribution data
+load_dotenv()
+MONGO_URI = os.getenv("MONGO_URI")
+client = MongoClient(MONGO_URI)
+db = client["roi_tracker"]
+
+# Load merged data
 df = pd.read_csv("sample_data/lead_attribution.csv")
-
-# Fill missing ad spend as 0
 df["spend"] = df["spend"].fillna(0)
 
-# Add cost per call (prevent division by 0)
-df["cost_per_call"] = df.apply(
-    lambda row: round(row["spend"] / 1, 2) if row["call_id"] else 0,
-    axis=1
-)
+# Push raw attribution data
+db.lead_attribution.delete_many({})
+db.lead_attribution.insert_many(df.to_dict(orient="records"))
+print("✅ lead_attribution data saved to MongoDB")
 
-# Aggregated metrics per campaign
-campaign_summary = df.groupby(
-    ["utm_source", "utm_medium", "utm_campaign", "ad_platform","tenant_id"]
+# Aggregate ROI metrics per tenant + campaign
+roi_df = df.groupby(
+    ["tenant_id", "ad_platform", "utm_source", "utm_medium", "utm_campaign"]
 ).agg(
     total_calls=("call_id", "count"),
     completed_calls=("call_status", lambda x: (x == "completed").sum()),
@@ -22,11 +27,9 @@ campaign_summary = df.groupby(
     total_spend=("spend", "sum")
 ).reset_index()
 
-# Add CPC
-campaign_summary["cost_per_call"] = round(
-    campaign_summary["total_spend"] / campaign_summary["total_calls"], 2
-)
+roi_df["cost_per_call"] = round(roi_df["total_spend"] / roi_df["total_calls"].replace(0, 1), 2)
 
-# Save to CSV
-campaign_summary.to_csv("sample_data/roi_metrics.csv", index=False)
-print("✅ ROI metrics saved to sample_data/roi_metrics.csv")
+# Push ROI summary
+db.roi_metrics.delete_many({})
+db.roi_metrics.insert_many(roi_df.to_dict(orient="records"))
+print("✅ roi_metrics saved to MongoDB")

@@ -4,6 +4,8 @@ import streamlit_authenticator as stauth
 from pymongo import MongoClient
 from dotenv import load_dotenv
 import os
+import subprocess
+import time
 
 # ---------------------------
 # Page Config (must be first)
@@ -47,14 +49,61 @@ elif auth_status:
     st.title(f"📊 Welcome, {name}!")
 
     # ---------------------------
+    # Fetch User Record and Role
+    # ---------------------------
+    user_record = db.tenants.find_one({"name": name})
+    user_role = user_record.get("role", "") if user_record else ""
+    is_admin = user_role in ["admin", "superadmin"]
+    is_superadmin = user_role == "superadmin"
+
+    # ---------------------------
+    # Show Last ETL Run
+    # ---------------------------
+    status = db.etl_status.find_one({"_id": "last_run"})
+    if status:
+        st.caption(f"🕒 Last ETL run: {pd.to_datetime(status['timestamp']).strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # ---------------------------
+    # Admin/Superadmin: ETL Button
+    # ---------------------------
+    if is_admin:
+        with st.sidebar:
+            if st.button("🔄 Refresh All Tenant Data"):
+                with st.spinner("Running full ETL pipeline..."):
+                    result = subprocess.run(["python3", "etl/run_etl.py"], capture_output=True, text=True)
+                    time.sleep(2)
+                    if result.returncode == 0:
+                        db.etl_status.update_one(
+                            {"_id": "last_run"},
+                            {"$set": {"timestamp": pd.Timestamp.now().isoformat()}},
+                            upsert=True
+                        )
+                        st.success("✅ ETL pipeline completed successfully!")
+                    else:
+                        st.error("❌ ETL pipeline failed.")
+                        st.text(result.stderr)
+
+    # ---------------------------
     # Load ROI Data from MongoDB
     # ---------------------------
     roi_data = list(db.roi_metrics.find({}))
     if not roi_data:
         st.warning("No ROI data found in MongoDB.")
         st.stop()
-
     df = pd.DataFrame(roi_data)
+
+    # ---------------------------
+    # Join with Tenants Collection
+    # ---------------------------
+    tenants = list(db.tenants.find({}))
+    tenant_df = pd.DataFrame(tenants)[["_id", "name"]].rename(columns={"_id": "tenant_id", "name": "tenant_name"})
+    df = df.merge(tenant_df, on="tenant_id", how="left")
+
+    # ---------------------------
+    # Regular User Sees Only Their Data
+    # ---------------------------
+    if not is_admin:
+        df = df[df["tenant_id"] == user_record["_id"]]
 
     # ---------------------------
     # Sidebar Filters
@@ -62,11 +111,9 @@ elif auth_status:
     with st.sidebar:
         st.subheader("🔎 Filter Campaigns")
 
-        # Tenant Filter (new)
-        tenant_ids = df["tenant_id"].dropna().unique().tolist()
-        tenant_filter = st.multiselect("Tenant", tenant_ids, default=tenant_ids)
+        tenant_names = df["tenant_name"].dropna().unique().tolist()
+        selected_tenants = st.multiselect("Tenant", tenant_names, default=tenant_names)
 
-        # Existing filters
         platform_filter = st.multiselect("Platform", options=df["ad_platform"].unique(), default=df["ad_platform"].unique())
         source_filter = st.multiselect("UTM Source", options=df["utm_source"].unique(), default=df["utm_source"].unique())
 
@@ -74,7 +121,7 @@ elif auth_status:
     # Apply Filters
     # ---------------------------
     filtered_df = df[
-        (df["tenant_id"].isin(tenant_filter)) &
+        (df["tenant_name"].isin(selected_tenants)) &
         (df["ad_platform"].isin(platform_filter)) &
         (df["utm_source"].isin(source_filter))
     ]
@@ -84,6 +131,13 @@ elif auth_status:
     # ---------------------------
     st.subheader("📋 ROI Summary Table")
     st.dataframe(filtered_df)
+
+    st.download_button(
+        label="📥 Download CSV",
+        data=filtered_df.to_csv(index=False),
+        file_name="filtered_roi_data.csv",
+        mime="text/csv"
+    )
 
     st.subheader("📈 Calls vs Spend by Campaign")
     chart_df = filtered_df.copy()

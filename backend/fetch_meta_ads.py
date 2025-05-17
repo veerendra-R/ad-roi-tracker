@@ -3,19 +3,21 @@ import pandas as pd
 from dotenv import load_dotenv
 from facebook_business.api import FacebookAdsApi
 from facebook_business.adobjects.adaccount import AdAccount
-from facebook_business.adobjects.adsinsights import AdsInsights
+from pymongo import MongoClient
 
 load_dotenv()
 
-ACCESS_TOKEN = os.getenv("META_ACCESS_TOKEN")
-AD_ACCOUNT_ID = os.getenv("META_AD_ACCOUNT_ID")  # Example: 'act_1234567890'
+# Shared credentials
 APP_ID = os.getenv("META_APP_ID")
 APP_SECRET = os.getenv("META_APP_SECRET")
 
-# Initialize SDK
-FacebookAdsApi.init(APP_ID, APP_SECRET, ACCESS_TOKEN)
+# MongoDB tenants
+MONGO_URI = os.getenv("MONGO_URI")
+client = MongoClient(MONGO_URI)
+db = client["roi_tracker"]
+tenants = db.tenants.find({})
 
-# Define fields and params
+# Meta fields
 FIELDS = [
     "ad_id", "ad_name", "campaign_id", "campaign_name", "adset_id", "adset_name",
     "impressions", "clicks", "spend", "account_name",
@@ -29,21 +31,35 @@ PARAMS = {
     "limit": 25,
 }
 
-def fetch_meta_ads():
-    ad_account = AdAccount(AD_ACCOUNT_ID)
+def fetch_meta_ads_for_tenant(tenant):
+    access_token = tenant.get("meta_access_token")
+    ad_account_id = tenant.get("meta_ad_account_id")
+    tenant_id = tenant.get("_id")
+
+    FacebookAdsApi.init(APP_ID, APP_SECRET, access_token)
+
+    ad_account = AdAccount(ad_account_id)
     ads = ad_account.get_insights(fields=FIELDS, params=PARAMS)
 
-    # Extract relevant fields into dataframe
     rows = []
     for ad in ads:
         row = {field: ad.get(field, "") for field in FIELDS}
+        row["tenant_id"] = tenant_id
         rows.append(row)
 
-    df = pd.DataFrame(rows)
-
-    # Save to CSV
-    df.to_csv("sample_data/meta_ads.csv", index=False)
-    print("✅ Meta Ads data saved to sample_data/meta_ads.csv")
+    return pd.DataFrame(rows)
 
 if __name__ == "__main__":
-    fetch_meta_ads()
+    all_data = []
+    for tenant in tenants:
+        if tenant.get("meta_ad_account_id") and tenant.get("meta_access_token"):
+            try:
+                tenant_df = fetch_meta_ads_for_tenant(tenant)
+                all_data.append(tenant_df)
+            except Exception as e:
+                print(f"❌ Error fetching Meta ads for tenant {tenant['_id']}: {e}")
+
+    if all_data:
+        combined_df = pd.concat(all_data, ignore_index=True)
+        combined_df.to_csv("sample_data/meta_ads.csv", index=False)
+        print("✅ All Meta Ads data saved to sample_data/meta_ads.csv")
