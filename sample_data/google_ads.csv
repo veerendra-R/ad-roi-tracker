@@ -1,0 +1,4 @@
+ad_id,ad_name,campaign_id,campaign_name,adset_id,adset_name,impressions,clicks,spend,utm_source,utm_medium,utm_campaign
+1011,Google Ad 1,1001,Plumber Campaign,2001,Call Extension Set,1500,60,300.0,google,cpc,plumbing_leads
+1012,Google Ad 2,1002,Dentist Campaign,2002,Location Ad Set,1200,45,250.0,google,cpc,clinic_2024
+
